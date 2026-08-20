@@ -126,6 +126,14 @@ public class Request : Entity
         return value.ValueKind == JsonValueKind.String ? value.GetString() : value.ToString();
     }
 
+    /// <summary>Seed-data only — see ApprovalTask.BackdateForSeed.</summary>
+    internal void BackdateForSeed(DateTimeOffset createdAt, DateTimeOffset? completedAt)
+    {
+        CreatedAt = createdAt;
+        if (completedAt is not null)
+            CompletedAt = completedAt;
+    }
+
     private static void ValidatePayload(string payloadJson)
     {
         try

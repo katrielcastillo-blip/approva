@@ -30,4 +30,10 @@ public class AuditEvent : Entity
             OccurredAt = DateTimeOffset.UtcNow
         };
     }
+
+    /// <summary>Seed-data only — see ApprovalTask.BackdateForSeed.</summary>
+    internal void BackdateForSeed(DateTimeOffset occurredAt)
+    {
+        OccurredAt = occurredAt;
+    }
 }

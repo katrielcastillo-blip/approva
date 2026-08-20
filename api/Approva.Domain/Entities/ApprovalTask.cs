@@ -89,6 +89,17 @@ public class ApprovalTask : Entity
 
     public bool IsOverdue(DateTimeOffset asOf) => Status == ApprovalTaskStatus.Pending && asOf > DueAt;
 
+    /// <summary>Seed-data only: overrides the otherwise-immutable "now" timestamps so demo
+    /// data can show a realistic historical spread instead of everything happening in the
+    /// same millisecond. Not reachable outside Approva.Infrastructure.</summary>
+    internal void BackdateForSeed(DateTimeOffset assignedAt, DateTimeOffset dueAt, DateTimeOffset? decidedAt)
+    {
+        AssignedAt = assignedAt;
+        DueAt = dueAt;
+        if (decidedAt is not null)
+            DecidedAt = decidedAt;
+    }
+
     private void EnsurePending()
     {
         if (Status != ApprovalTaskStatus.Pending)
