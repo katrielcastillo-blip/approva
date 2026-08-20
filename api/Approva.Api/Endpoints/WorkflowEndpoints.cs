@@ -10,15 +10,19 @@ public static class WorkflowEndpoints
 {
     public static void MapWorkflowEndpoints(this IEndpointRouteBuilder app)
     {
+        // Reads are available to any authenticated user in the tenant — a Requester
+        // needs to list active workflows to pick one when submitting a request. Only
+        // the write operations (define/activate/deactivate) are Admin-only.
         var group = app.MapGroup("/workflow-definitions")
             .WithTags("Workflows")
-            .RequireAuthorization("AdminOnly");
+            .RequireAuthorization();
 
         group.MapPost("/", async (CreateWorkflowDefinitionCommand cmd, ISender sender, CancellationToken ct) =>
         {
             var id = await sender.Send(cmd, ct);
             return Results.Created($"/workflow-definitions/{id}", new { id });
-        }).WithName("CreateWorkflowDefinition").WithSummary("Define un nuevo flujo de aprobación configurable.");
+        }).RequireAuthorization("AdminOnly").WithName("CreateWorkflowDefinition")
+          .WithSummary("Define un nuevo flujo de aprobación configurable.");
 
         group.MapGet("/", async (ISender sender, CancellationToken ct) =>
         {
@@ -36,12 +40,12 @@ public static class WorkflowEndpoints
         {
             await sender.Send(new SetWorkflowDefinitionActiveCommand(id, true), ct);
             return Results.NoContent();
-        }).WithName("ActivateWorkflowDefinition");
+        }).RequireAuthorization("AdminOnly").WithName("ActivateWorkflowDefinition");
 
         group.MapPost("/{id:guid}/deactivate", async (Guid id, ISender sender, CancellationToken ct) =>
         {
             await sender.Send(new SetWorkflowDefinitionActiveCommand(id, false), ct);
             return Results.NoContent();
-        }).WithName("DeactivateWorkflowDefinition");
+        }).RequireAuthorization("AdminOnly").WithName("DeactivateWorkflowDefinition");
     }
 }

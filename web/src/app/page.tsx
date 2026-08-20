@@ -1,11 +1,21 @@
-export default function Home() {
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth-context";
+
+export default function RootPage() {
+  const { user, isLoading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isLoading) return;
+    router.replace(user ? "/approvals" : "/login");
+  }, [isLoading, user, router]);
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-8 text-center">
-      <h1 className="text-4xl font-bold">Approva</h1>
-      <p className="max-w-md text-balance text-sm text-neutral-500">
-        Motor de aprobaciones empresariales configurable, multi-tenant. En
-        construcción.
-      </p>
-    </main>
+    <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
+      Cargando…
+    </div>
   );
 }
