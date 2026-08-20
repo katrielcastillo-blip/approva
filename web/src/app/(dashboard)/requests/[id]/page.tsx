@@ -12,7 +12,20 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckCircle2, XCircle, Clock, User as UserIcon } from "lucide-react";
+import {
+  CheckCircle2,
+  XCircle,
+  Clock,
+  User as UserIcon,
+  FileText,
+  Send,
+  UserPlus,
+  ThumbsUp,
+  ThumbsDown,
+  Ban,
+  Sparkles,
+  type LucideIcon,
+} from "lucide-react";
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   Draft: "outline",
@@ -31,6 +44,21 @@ const TASK_STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive
   Skipped: "outline",
 };
 
+const EVENT_ICON: Record<string, LucideIcon> = {
+  RequestCreated: FileText,
+  RequestSubmitted: Send,
+  TaskAssigned: UserPlus,
+  TaskApproved: ThumbsUp,
+  TaskRejected: ThumbsDown,
+  TaskEscalated: Clock,
+  TaskDelegated: UserPlus,
+  RequestApproved: CheckCircle2,
+  RequestRejected: XCircle,
+  RequestCancelled: Ban,
+};
+
+const COMMENT_MAX = 1000;
+
 export default function RequestDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { user } = useAuth();
@@ -42,8 +70,8 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
   if (isLoading || !request) {
     return (
       <div className="flex flex-col gap-4">
-        <Skeleton className="h-10 w-1/2" />
-        <Skeleton className="h-48 w-full" />
+        <Skeleton className="h-10 w-1/2 rounded-lg" />
+        <Skeleton className="h-48 w-full rounded-2xl" />
       </div>
     );
   }
@@ -52,8 +80,13 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
   const canCancel =
     (request.requesterId === user?.userId || user?.role === "Admin") &&
     (request.status === "Draft" || request.status === "Pending");
+  const commentTooLong = comment.length > COMMENT_MAX;
 
   async function handleDecision(decision: "Approve" | "Reject") {
+    if (commentTooLong) {
+      toast.error(`El comentario no puede superar ${COMMENT_MAX} caracteres.`);
+      return;
+    }
     try {
       await decide.mutateAsync({ requestId: id, decision, comment: comment || undefined });
       toast.success(decision === "Approve" ? "Solicitud aprobada." : "Solicitud rechazada.");
@@ -85,34 +118,44 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold">{request.title}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight">{request.title}</h1>
             <Badge variant={STATUS_VARIANT[request.status] ?? "outline"}>{statusLabel(request.status)}</Badge>
           </div>
-          <p className="text-sm text-muted-foreground">
+          <p className="mt-0.5 text-sm text-muted-foreground">
             {request.requesterName} · {request.workflowDefinitionName} · {formatDateTime(request.createdAt)}
           </p>
         </div>
         <div className="text-right">
-          <p className="text-2xl font-bold">{formatCurrency(request.amount, request.currency)}</p>
+          <p className="text-2xl font-semibold tabular-nums">{formatCurrency(request.amount, request.currency)}</p>
         </div>
       </div>
 
       {myPendingTask && (
-        <Card className="border-primary">
+        <Card className="glass-strong shadow-glow-lg rounded-2xl border-primary/30">
           <CardHeader>
-            <CardTitle className="text-base">Tienes una decisión pendiente</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Sparkles className="size-4 text-primary" />
+              Tienes una decisión pendiente
+            </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            <Textarea
-              placeholder="Comentario (opcional)"
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-            />
+            <div className="flex flex-col gap-1">
+              <Textarea
+                placeholder="Comentario (opcional)"
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                aria-invalid={commentTooLong}
+                className="bg-background/60"
+              />
+              <p className={`text-right text-xs ${commentTooLong ? "text-destructive" : "text-muted-foreground"}`}>
+                {comment.length}/{COMMENT_MAX}
+              </p>
+            </div>
             <div className="flex gap-2">
-              <Button onClick={() => handleDecision("Approve")} disabled={decide.isPending}>
+              <Button onClick={() => handleDecision("Approve")} disabled={decide.isPending} className="shadow-glow">
                 <CheckCircle2 className="size-4" />
                 Aprobar
               </Button>
@@ -126,13 +169,13 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
       )}
 
       {Object.keys(payload).length > 0 && (
-        <Card>
+        <Card className="glass rounded-2xl border-border/60">
           <CardHeader>
             <CardTitle className="text-base">Detalles</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
             {Object.entries(payload).map(([key, value]) => (
-              <div key={key} className="flex justify-between border-b py-1">
+              <div key={key} className="flex justify-between border-b border-border/60 py-1.5">
                 <span className="text-muted-foreground">{key}</span>
                 <span className="font-medium">{String(value)}</span>
               </div>
@@ -141,7 +184,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
         </Card>
       )}
 
-      <Card>
+      <Card className="glass rounded-2xl border-border/60">
         <CardHeader>
           <CardTitle className="text-base">Tareas de aprobación</CardTitle>
         </CardHeader>
@@ -150,9 +193,14 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
             <p className="text-sm text-muted-foreground">Sin pasos aplicables — aprobación automática.</p>
           )}
           {request.tasks.map((t) => (
-            <div key={t.id} className="flex items-center justify-between rounded-md border p-3 text-sm">
+            <div
+              key={t.id}
+              className="flex items-center justify-between rounded-xl border border-border/60 bg-background/40 p-3 text-sm"
+            >
               <div className="flex items-center gap-3">
-                <UserIcon className="size-4 text-muted-foreground" />
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
+                  <UserIcon className="size-4" />
+                </div>
                 <div>
                   <p className="font-medium">{t.stepName}</p>
                   <p className="text-muted-foreground">{t.assignedToUserName}</p>
@@ -172,26 +220,33 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="glass rounded-2xl border-border/60">
         <CardHeader>
           <CardTitle className="text-base">Auditoría</CardTitle>
         </CardHeader>
         <CardContent>
-          <ol className="flex flex-col gap-4">
-            {request.auditTrail.map((event, i) => (
-              <li key={event.id} className="relative flex gap-3 pl-4">
-                <div className="absolute top-1.5 left-0 size-2 rounded-full bg-primary" />
-                {i < request.auditTrail.length - 1 && (
-                  <div className="absolute top-3.5 left-[3px] h-full w-px bg-border" />
-                )}
-                <div className="flex-1">
-                  <p className="text-sm font-medium">{eventLabel(event.eventType)}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {event.actorName} · {formatDateTime(event.occurredAt)}
-                  </p>
-                </div>
-              </li>
-            ))}
+          <ol className="flex flex-col gap-5">
+            {request.auditTrail.map((event, i) => {
+              const Icon = EVENT_ICON[event.eventType] ?? FileText;
+              return (
+                <li key={event.id} className="relative flex gap-3 pl-1">
+                  <div className="relative flex flex-col items-center">
+                    <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary ring-4 ring-background">
+                      <Icon className="size-3.5" />
+                    </div>
+                    {i < request.auditTrail.length - 1 && (
+                      <div className="absolute top-7 h-[calc(100%+0.75rem)] w-px bg-border" />
+                    )}
+                  </div>
+                  <div className="flex-1 pb-1">
+                    <p className="text-sm font-medium">{eventLabel(event.eventType)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {event.actorName} · {formatDateTime(event.occurredAt)}
+                    </p>
+                  </div>
+                </li>
+              );
+            })}
           </ol>
         </CardContent>
       </Card>

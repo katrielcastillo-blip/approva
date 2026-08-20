@@ -2,15 +2,20 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import type { z } from "zod";
+import { Plus, Trash2, FilePlus2 } from "lucide-react";
 import { useWorkflowDefinitions, useCreateRequest } from "@/lib/hooks";
 import { ApiError } from "@/lib/api-client";
+import { newRequestSchema, type NewRequestInput } from "@/lib/validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/page-header";
 import {
   Select,
   SelectContent,
@@ -29,12 +34,17 @@ export default function NewRequestPage() {
   const { data: workflows, isLoading: workflowsLoading } = useWorkflowDefinitions();
   const createRequest = useCreateRequest();
 
-  const [workflowId, setWorkflowId] = useState("");
-  const [title, setTitle] = useState("");
-  const [amount, setAmount] = useState("");
-  const [currency, setCurrency] = useState("USD");
-  const [description, setDescription] = useState("");
   const [fields, setFields] = useState<PayloadField[]>([{ key: "Department", value: "" }]);
+
+  const {
+    control,
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<z.input<typeof newRequestSchema>, unknown, NewRequestInput>({
+    resolver: zodResolver(newRequestSchema),
+    defaultValues: { workflowDefinitionId: "", title: "", amount: 0, currency: "USD", description: "" },
+  });
 
   const activeWorkflows = workflows?.filter((w) => w.isActive) ?? [];
 
@@ -50,21 +60,19 @@ export default function NewRequestPage() {
     setFields((prev) => prev.filter((_, i) => i !== index));
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-
+  async function onSubmit(values: NewRequestInput) {
     const payload: Record<string, string> = {};
-    if (description) payload.Description = description;
+    if (values.description) payload.Description = values.description;
     for (const f of fields) {
       if (f.key.trim()) payload[f.key.trim()] = f.value;
     }
 
     try {
       const result = await createRequest.mutateAsync({
-        workflowDefinitionId: workflowId,
-        title,
-        amount: Number(amount),
-        currency,
+        workflowDefinitionId: values.workflowDefinitionId,
+        title: values.title,
+        amount: values.amount,
+        currency: values.currency.toUpperCase(),
         payloadJson: JSON.stringify(payload),
       });
       toast.success("Solicitud enviada.");
@@ -76,38 +84,52 @@ export default function NewRequestPage() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold">Nueva solicitud</h1>
-        <p className="text-sm text-muted-foreground">
-          Se envía de inmediato: el motor de reglas calcula el primer paso automáticamente.
-        </p>
-      </div>
+      <PageHeader
+        icon={FilePlus2}
+        title="Nueva solicitud"
+        description="Se envía de inmediato: el motor de reglas calcula el primer paso automáticamente."
+      />
 
-      <Card>
+      <Card className="glass rounded-2xl border-border/60">
         <CardHeader>
           <CardTitle className="text-base">Detalles</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="workflow">Flujo de aprobación</Label>
-              <Select value={workflowId} onValueChange={setWorkflowId} required>
-                <SelectTrigger id="workflow" className="w-full">
-                  <SelectValue placeholder={workflowsLoading ? "Cargando…" : "Selecciona un flujo"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {activeWorkflows.map((w) => (
-                    <SelectItem key={w.id} value={w.id}>
-                      {w.name} ({w.stepCount} pasos)
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Controller
+                control={control}
+                name="workflowDefinitionId"
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger id="workflow" className="w-full" aria-invalid={!!errors.workflowDefinitionId}>
+                      <SelectValue placeholder={workflowsLoading ? "Cargando…" : "Selecciona un flujo"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activeWorkflows.map((w) => (
+                        <SelectItem key={w.id} value={w.id}>
+                          {w.name} ({w.stepCount} paso{w.stepCount === 1 ? "" : "s"})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              {errors.workflowDefinitionId && (
+                <p className="text-xs text-destructive">{errors.workflowDefinitionId.message}</p>
+              )}
+              {!workflowsLoading && activeWorkflows.length === 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  No hay flujos activos. Pídele a un administrador que active uno en &ldquo;Flujos&rdquo;.
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="title">Título</Label>
-              <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} required />
+              <Input id="title" aria-invalid={!!errors.title} {...register("title")} />
+              {errors.title && <p className="text-xs text-destructive">{errors.title.message}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -118,26 +140,28 @@ export default function NewRequestPage() {
                   type="number"
                   min={0}
                   step="0.01"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  required
+                  aria-invalid={!!errors.amount}
+                  {...register("amount")}
                 />
+                {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="currency">Moneda</Label>
                 <Input
                   id="currency"
-                  value={currency}
                   maxLength={3}
-                  onChange={(e) => setCurrency(e.target.value.toUpperCase())}
-                  required
+                  className="uppercase"
+                  aria-invalid={!!errors.currency}
+                  {...register("currency")}
                 />
+                {errors.currency && <p className="text-xs text-destructive">{errors.currency.message}</p>}
               </div>
             </div>
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="description">Descripción</Label>
-              <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} />
+              <Textarea id="description" {...register("description")} />
+              {errors.description && <p className="text-xs text-destructive">{errors.description.message}</p>}
             </div>
 
             <div className="flex flex-col gap-2">
@@ -170,7 +194,7 @@ export default function NewRequestPage() {
               ))}
             </div>
 
-            <Button type="submit" disabled={!workflowId || createRequest.isPending} className="mt-2">
+            <Button type="submit" disabled={createRequest.isPending} className="shadow-glow mt-2 h-10">
               {createRequest.isPending ? "Enviando…" : "Enviar solicitud"}
             </Button>
           </form>

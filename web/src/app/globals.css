@@ -128,3 +128,47 @@
     @apply font-sans;
   }
 }
+
+/* ── Premium / glassmorphism utilities ───────────────────────────── */
+
+@utility glass {
+  background-color: color-mix(in oklch, var(--card) 62%, transparent);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid color-mix(in oklch, var(--foreground) 9%, transparent);
+}
+
+@utility glass-strong {
+  background-color: color-mix(in oklch, var(--card) 82%, transparent);
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  border: 1px solid color-mix(in oklch, var(--foreground) 10%, transparent);
+}
+
+@utility shadow-glow {
+  box-shadow:
+    0 1px 1px color-mix(in oklch, var(--foreground) 4%, transparent),
+    0 12px 40px -12px color-mix(in oklch, var(--primary) 45%, transparent);
+}
+
+@utility shadow-glow-lg {
+  box-shadow:
+    0 1px 1px color-mix(in oklch, var(--foreground) 4%, transparent),
+    0 24px 70px -20px color-mix(in oklch, var(--primary) 50%, transparent);
+}
+
+@utility bg-mesh {
+  background-image:
+    radial-gradient(at 12% 8%, color-mix(in oklch, var(--primary) 22%, transparent) 0px, transparent 52%),
+    radial-gradient(at 88% 0%, color-mix(in oklch, var(--chart-2) 18%, transparent) 0px, transparent 50%),
+    radial-gradient(at 15% 100%, color-mix(in oklch, var(--chart-5) 16%, transparent) 0px, transparent 55%),
+    radial-gradient(at 100% 90%, color-mix(in oklch, var(--primary) 14%, transparent) 0px, transparent 50%);
+  background-color: var(--background);
+}
+
+@utility bg-mesh-subtle {
+  background-image:
+    radial-gradient(at 10% 0%, color-mix(in oklch, var(--primary) 7%, transparent) 0px, transparent 55%),
+    radial-gradient(at 95% 15%, color-mix(in oklch, var(--chart-2) 6%, transparent) 0px, transparent 50%);
+  background-color: var(--background);
+}

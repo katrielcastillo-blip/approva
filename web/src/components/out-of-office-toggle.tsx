@@ -76,7 +76,7 @@ export function OutOfOfficeToggle() {
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <DialogContent className="glass-strong">
           <DialogHeader>
             <DialogTitle>Activar fuera de oficina</DialogTitle>
           </DialogHeader>

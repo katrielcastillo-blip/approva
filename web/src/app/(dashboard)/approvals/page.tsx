@@ -7,27 +7,30 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
+import { PageHeader } from "@/components/page-header";
+import { Inbox, ChevronRight, Clock } from "lucide-react";
 
 export default function ApprovalsPage() {
   const { data, isLoading } = usePendingApprovals();
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold">Aprobaciones pendientes</h1>
-        <p className="text-sm text-muted-foreground">Tareas asignadas a ti que esperan una decisión.</p>
-      </div>
+      <PageHeader
+        icon={Inbox}
+        title="Aprobaciones pendientes"
+        description="Tareas asignadas a ti que esperan una decisión."
+      />
 
       {isLoading && (
         <div className="flex flex-col gap-3">
           {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-24 w-full" />
+            <Skeleton key={i} className="h-24 w-full rounded-2xl" />
           ))}
         </div>
       )}
 
       {!isLoading && data?.length === 0 && (
-        <Card>
+        <Card className="glass border-dashed">
           <CardContent>
             <EmptyState title="No tienes aprobaciones pendientes" description="Estás al día. 🎉" />
           </CardContent>
@@ -36,23 +39,29 @@ export default function ApprovalsPage() {
 
       <div className="flex flex-col gap-3">
         {data?.map((item) => (
-          <Link key={item.taskId} href={`/requests/${item.requestId}`}>
-            <Card className="transition-colors hover:border-primary">
-              <CardContent className="flex items-center justify-between gap-4 py-4">
-                <div className="flex flex-col gap-1">
+          <Link key={item.taskId} href={`/requests/${item.requestId}`} className="group">
+            <Card className="glass shadow-glow overflow-hidden rounded-2xl border-border/60 py-0 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:border-primary/40">
+              <CardContent className="flex items-center justify-between gap-4 px-5 py-4">
+                <div className="flex min-w-0 flex-col gap-1">
                   <div className="flex items-center gap-2">
-                    <p className="font-medium">{item.requestTitle}</p>
-                    {item.isOverdue && <Badge variant="destructive">Vencida</Badge>}
+                    <p className="truncate font-medium">{item.requestTitle}</p>
+                    {item.isOverdue && (
+                      <Badge variant="destructive" className="gap-1">
+                        <Clock className="size-3" />
+                        Vencida
+                      </Badge>
+                    )}
                   </div>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="truncate text-sm text-muted-foreground">
                     {item.requesterName} · Paso: {item.stepName}
                   </p>
                 </div>
-                <div className="flex flex-col items-end gap-1">
-                  <span className="font-semibold">{formatCurrency(item.amount, item.currency)}</span>
-                  <span className="text-xs text-muted-foreground">
-                    Vence {formatRelativeToNow(item.dueAt)}
-                  </span>
+                <div className="flex shrink-0 items-center gap-3">
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="font-semibold">{formatCurrency(item.amount, item.currency)}</span>
+                    <span className="text-xs text-muted-foreground">Vence {formatRelativeToNow(item.dueAt)}</span>
+                  </div>
+                  <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
                 </div>
               </CardContent>
             </Card>

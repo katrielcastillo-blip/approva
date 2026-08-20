@@ -1,17 +1,23 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2, GripVertical } from "lucide-react";
-import { useCreateWorkflowDefinition, useUsers, type WorkflowStepInput } from "@/lib/hooks";
+import { useForm, useFieldArray, Controller, type Control, type UseFormRegister, type FieldErrors } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import type { z } from "zod";
+import { Plus, Trash2, GripVertical, Workflow as WorkflowIcon } from "lucide-react";
+import { useCreateWorkflowDefinition, useUsers } from "@/lib/hooks";
 import { ApiError } from "@/lib/api-client";
+import { newWorkflowSchema, type NewWorkflowInput } from "@/lib/validation";
+
+type FormValues = z.input<typeof newWorkflowSchema>;
 import type { ApproverType, ConditionOperator } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { PageHeader } from "@/components/page-header";
 import {
   Select,
   SelectContent,
@@ -37,14 +43,14 @@ const OPERATORS: { value: ConditionOperator; label: string }[] = [
   { value: "NotIn", label: "No está en (lista separada por comas)" },
 ];
 
-function emptyStep(): WorkflowStepInput {
+function emptyStep() {
   return {
     name: "",
-    approverType: "Manager",
-    approverRef: null,
+    approverType: "Manager" as ApproverType,
+    approverRef: null as string | null,
     slaHours: 24,
-    escalationPolicy: "EscalateToManager",
-    conditions: [],
+    escalationPolicy: "EscalateToManager" as const,
+    conditions: [] as { field: string; operator: ConditionOperator; value: string }[],
   };
 }
 
@@ -53,61 +59,28 @@ export default function NewWorkflowPage() {
   const { data: users } = useUsers();
   const createWorkflow = useCreateWorkflowDefinition();
 
-  const [name, setName] = useState("");
-  const [entityType, setEntityType] = useState("PurchaseRequest");
-  const [steps, setSteps] = useState<WorkflowStepInput[]>([emptyStep()]);
+  const {
+    control,
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors },
+  } = useForm<FormValues, unknown, NewWorkflowInput>({
+    resolver: zodResolver(newWorkflowSchema),
+    defaultValues: { name: "", entityType: "PurchaseRequest", steps: [emptyStep()] },
+  });
+
+  const { fields: stepFields, append: appendStep, remove: removeStep } = useFieldArray({ control, name: "steps" });
 
   const approverRoles = Array.from(
     new Set((users ?? []).map((u) => u.approverRole).filter((r): r is string => !!r))
   );
 
-  function updateStep(index: number, patch: Partial<WorkflowStepInput>) {
-    setSteps((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
-  }
-
-  function addStep() {
-    setSteps((prev) => [...prev, emptyStep()]);
-  }
-
-  function removeStep(index: number) {
-    setSteps((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  function addCondition(stepIndex: number) {
-    setSteps((prev) =>
-      prev.map((s, i) =>
-        i === stepIndex
-          ? { ...s, conditions: [...s.conditions, { field: "Amount", operator: "GreaterThan", value: "" }] }
-          : s
-      )
-    );
-  }
-
-  function updateCondition(stepIndex: number, condIndex: number, patch: Partial<WorkflowStepInput["conditions"][number]>) {
-    setSteps((prev) =>
-      prev.map((s, i) =>
-        i === stepIndex
-          ? {
-              ...s,
-              conditions: s.conditions.map((c, j) => (j === condIndex ? { ...c, ...patch } : c)),
-            }
-          : s
-      )
-    );
-  }
-
-  function removeCondition(stepIndex: number, condIndex: number) {
-    setSteps((prev) =>
-      prev.map((s, i) => (i === stepIndex ? { ...s, conditions: s.conditions.filter((_, j) => j !== condIndex) } : s))
-    );
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function onSubmit(values: NewWorkflowInput) {
     try {
-      await createWorkflow.mutateAsync({ name, entityType, steps });
+      await createWorkflow.mutateAsync(values);
       toast.success("Flujo creado. Actívalo para empezar a usarlo.");
-      router.push(`/workflows`);
+      router.push("/workflows");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "No se pudo crear el flujo.");
     }
@@ -115,156 +88,241 @@ export default function NewWorkflowPage() {
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6 pb-16">
-      <div>
-        <h1 className="text-2xl font-bold">Nuevo flujo de aprobación</h1>
-        <p className="text-sm text-muted-foreground">
-          Los pasos se evalúan en orden. Un paso sin condiciones siempre aplica; con condiciones, todas
-          deben cumplirse (AND) para que el paso entre en el flujo.
-        </p>
-      </div>
+      <PageHeader
+        icon={WorkflowIcon}
+        title="Nuevo flujo de aprobación"
+        description="Los pasos se evalúan en orden. Un paso sin condiciones siempre aplica; con condiciones, todas deben cumplirse (AND) para que el paso entre en el flujo."
+      />
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-        <Card>
+      <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-6">
+        <Card className="glass rounded-2xl border-border/60">
           <CardHeader>
             <CardTitle className="text-base">Información general</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="name">Nombre del flujo</Label>
-              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
+              <Input id="name" aria-invalid={!!errors.name} {...register("name")} />
+              {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="entityType">Tipo de entidad</Label>
-              <Input id="entityType" value={entityType} onChange={(e) => setEntityType(e.target.value)} required />
+              <Input id="entityType" aria-invalid={!!errors.entityType} {...register("entityType")} />
+              {errors.entityType && <p className="text-xs text-destructive">{errors.entityType.message}</p>}
             </div>
           </CardContent>
         </Card>
 
+        {errors.steps?.root?.message && (
+          <p className="text-sm text-destructive">{errors.steps.root.message}</p>
+        )}
+        {typeof errors.steps?.message === "string" && (
+          <p className="text-sm text-destructive">{errors.steps.message}</p>
+        )}
+
         <div className="flex flex-col gap-4">
-          {steps.map((step, stepIndex) => (
-            <Card key={stepIndex}>
-              <CardHeader className="flex-row items-center justify-between">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <GripVertical className="size-4 text-muted-foreground" />
-                  Paso {stepIndex + 1}
-                </CardTitle>
-                {steps.length > 1 && (
-                  <Button type="button" variant="ghost" size="icon" onClick={() => removeStep(stepIndex)}>
-                    <Trash2 className="size-4" />
-                  </Button>
+          {stepFields.map((stepField, stepIndex) => (
+            <StepCard
+              key={stepField.id}
+              control={control}
+              register={register}
+              stepIndex={stepIndex}
+              canRemove={stepFields.length > 1}
+              onRemove={() => removeStep(stepIndex)}
+              approverType={watch(`steps.${stepIndex}.approverType`)}
+              approverRoles={approverRoles}
+              users={users}
+              errors={errors}
+            />
+          ))}
+        </div>
+
+        <Button type="button" variant="outline" onClick={() => appendStep(emptyStep())} className="self-start">
+          <Plus className="size-4" />
+          Agregar paso
+        </Button>
+
+        <Button type="submit" disabled={createWorkflow.isPending} className="shadow-glow h-10">
+          {createWorkflow.isPending ? "Guardando…" : "Crear flujo"}
+        </Button>
+      </form>
+    </div>
+  );
+}
+
+function StepCard({
+  control,
+  register,
+  stepIndex,
+  canRemove,
+  onRemove,
+  approverType,
+  approverRoles,
+  users,
+  errors,
+}: {
+  control: Control<FormValues, unknown, NewWorkflowInput>;
+  register: UseFormRegister<FormValues>;
+  stepIndex: number;
+  canRemove: boolean;
+  onRemove: () => void;
+  approverType: ApproverType;
+  approverRoles: string[];
+  users: { id: string; name: string; email: string }[] | undefined;
+  errors: FieldErrors<FormValues>;
+}) {
+  const { fields: conditionFields, append: appendCondition, remove: removeCondition } = useFieldArray({
+    control,
+    name: `steps.${stepIndex}.conditions`,
+  });
+
+  const stepErrors = errors.steps?.[stepIndex];
+
+  return (
+    <Card className="glass rounded-2xl border-border/60">
+      <CardHeader className="flex-row items-center justify-between">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <GripVertical className="size-4 text-muted-foreground" />
+          Paso {stepIndex + 1}
+        </CardTitle>
+        {canRemove && (
+          <Button type="button" variant="ghost" size="icon" onClick={onRemove}>
+            <Trash2 className="size-4" />
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label>Nombre del paso</Label>
+            <Input
+              placeholder="Aprobación CFO"
+              aria-invalid={!!stepErrors?.name}
+              {...register(`steps.${stepIndex}.name`)}
+            />
+            {stepErrors?.name && <p className="text-xs text-destructive">{stepErrors.name.message}</p>}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>SLA (horas)</Label>
+            <Input
+              type="number"
+              min={1}
+              aria-invalid={!!stepErrors?.slaHours}
+              {...register(`steps.${stepIndex}.slaHours`)}
+            />
+            {stepErrors?.slaHours && <p className="text-xs text-destructive">{stepErrors.slaHours.message}</p>}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label>Aprobador</Label>
+            <Controller
+              control={control}
+              name={`steps.${stepIndex}.approverType`}
+              render={({ field }) => (
+                <Select
+                  value={field.value}
+                  onValueChange={(v) => {
+                    field.onChange(v);
+                  }}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {APPROVER_TYPES.map((t) => (
+                      <SelectItem key={t.value} value={t.value}>
+                        {t.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </div>
+
+          {approverType === "Role" && (
+            <div className="flex flex-col gap-1.5">
+              <Label>Rol (ej. CFO, CEO, HR Manager)</Label>
+              <Input
+                list={`roles-${stepIndex}`}
+                aria-invalid={!!stepErrors?.approverRef}
+                {...register(`steps.${stepIndex}.approverRef`)}
+              />
+              <datalist id={`roles-${stepIndex}`}>
+                {approverRoles.map((r) => (
+                  <option key={r} value={r} />
+                ))}
+              </datalist>
+              {stepErrors?.approverRef && (
+                <p className="text-xs text-destructive">{stepErrors.approverRef.message}</p>
+              )}
+            </div>
+          )}
+
+          {approverType === "SpecificUser" && (
+            <div className="flex flex-col gap-1.5">
+              <Label>Usuario</Label>
+              <Controller
+                control={control}
+                name={`steps.${stepIndex}.approverRef`}
+                render={({ field }) => (
+                  <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                    <SelectTrigger className="w-full" aria-invalid={!!stepErrors?.approverRef}>
+                      <SelectValue placeholder="Selecciona un usuario" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {users?.map((u) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.name} ({u.email})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 )}
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex flex-col gap-1.5">
-                    <Label>Nombre del paso</Label>
-                    <Input
-                      value={step.name}
-                      onChange={(e) => updateStep(stepIndex, { name: e.target.value })}
-                      placeholder="Aprobación CFO"
-                      required
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label>SLA (horas)</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={step.slaHours}
-                      onChange={(e) => updateStep(stepIndex, { slaHours: Number(e.target.value) })}
-                      required
-                    />
-                  </div>
-                </div>
+              />
+              {stepErrors?.approverRef && (
+                <p className="text-xs text-destructive">{stepErrors.approverRef.message}</p>
+              )}
+            </div>
+          )}
+        </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex flex-col gap-1.5">
-                    <Label>Aprobador</Label>
-                    <Select
-                      value={step.approverType}
-                      onValueChange={(v) =>
-                        updateStep(stepIndex, { approverType: v as ApproverType, approverRef: null })
-                      }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {APPROVER_TYPES.map((t) => (
-                          <SelectItem key={t.value} value={t.value}>
-                            {t.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+        <Separator />
 
-                  {step.approverType === "Role" && (
-                    <div className="flex flex-col gap-1.5">
-                      <Label>Rol (ej. CFO, CEO, HR Manager)</Label>
-                      <Input
-                        list={`roles-${stepIndex}`}
-                        value={step.approverRef ?? ""}
-                        onChange={(e) => updateStep(stepIndex, { approverRef: e.target.value })}
-                        required
-                      />
-                      <datalist id={`roles-${stepIndex}`}>
-                        {approverRoles.map((r) => (
-                          <option key={r} value={r} />
-                        ))}
-                      </datalist>
-                    </div>
-                  )}
-
-                  {step.approverType === "SpecificUser" && (
-                    <div className="flex flex-col gap-1.5">
-                      <Label>Usuario</Label>
-                      <Select
-                        value={step.approverRef ?? ""}
-                        onValueChange={(v) => updateStep(stepIndex, { approverRef: v })}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Selecciona un usuario" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {users?.map((u) => (
-                            <SelectItem key={u.id} value={u.id}>
-                              {u.name} ({u.email})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </div>
-
-                <Separator />
-
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Condiciones (todas deben cumplirse)</Label>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => addCondition(stepIndex)}>
-                      <Plus className="size-3.5" />
-                      Agregar condición
-                    </Button>
-                  </div>
-                  {step.conditions.length === 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      Sin condiciones: este paso siempre aplica.
-                    </p>
-                  )}
-                  {step.conditions.map((cond, condIndex) => (
-                    <div key={condIndex} className="flex items-center gap-2">
-                      <Input
-                        placeholder="Campo (ej. Amount, Department)"
-                        value={cond.field}
-                        onChange={(e) => updateCondition(stepIndex, condIndex, { field: e.target.value })}
-                        className="flex-1"
-                      />
-                      <Select
-                        value={cond.operator}
-                        onValueChange={(v) => updateCondition(stepIndex, condIndex, { operator: v as ConditionOperator })}
-                      >
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <Label>Condiciones (todas deben cumplirse)</Label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => appendCondition({ field: "Amount", operator: "GreaterThan", value: "" })}
+            >
+              <Plus className="size-3.5" />
+              Agregar condición
+            </Button>
+          </div>
+          {conditionFields.length === 0 && (
+            <p className="text-xs text-muted-foreground">Sin condiciones: este paso siempre aplica.</p>
+          )}
+          {conditionFields.map((condField, condIndex) => {
+            const condErrors = stepErrors?.conditions?.[condIndex];
+            return (
+              <div key={condField.id} className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <Input
+                    placeholder="Campo (ej. Amount, Department)"
+                    className="flex-1"
+                    aria-invalid={!!condErrors?.field}
+                    {...register(`steps.${stepIndex}.conditions.${condIndex}.field`)}
+                  />
+                  <Controller
+                    control={control}
+                    name={`steps.${stepIndex}.conditions.${condIndex}.operator`}
+                    render={({ field }) => (
+                      <Select value={field.value} onValueChange={field.onChange}>
                         <SelectTrigger className="w-48">
                           <SelectValue />
                         </SelectTrigger>
@@ -276,37 +334,28 @@ export default function NewWorkflowPage() {
                           ))}
                         </SelectContent>
                       </Select>
-                      <Input
-                        placeholder="Valor"
-                        value={cond.value}
-                        onChange={(e) => updateCondition(stepIndex, condIndex, { value: e.target.value })}
-                        className="flex-1"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeCondition(stepIndex, condIndex)}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
-                    </div>
-                  ))}
+                    )}
+                  />
+                  <Input
+                    placeholder="Valor"
+                    className="flex-1"
+                    aria-invalid={!!condErrors?.value}
+                    {...register(`steps.${stepIndex}.conditions.${condIndex}.value`)}
+                  />
+                  <Button type="button" variant="ghost" size="icon" onClick={() => removeCondition(condIndex)}>
+                    <Trash2 className="size-4" />
+                  </Button>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+                {(condErrors?.field || condErrors?.value) && (
+                  <p className="text-xs text-destructive">
+                    {condErrors?.field?.message ?? condErrors?.value?.message}
+                  </p>
+                )}
+              </div>
+            );
+          })}
         </div>
-
-        <Button type="button" variant="outline" onClick={addStep} className="self-start">
-          <Plus className="size-4" />
-          Agregar paso
-        </Button>
-
-        <Button type="submit" disabled={createWorkflow.isPending}>
-          {createWorkflow.isPending ? "Guardando…" : "Crear flujo"}
-        </Button>
-      </form>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

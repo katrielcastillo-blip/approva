@@ -6,7 +6,14 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       <div className="relative hidden flex-col justify-between overflow-hidden bg-primary p-10 text-primary-foreground lg:flex">
-        <div className="flex items-center gap-2 text-lg font-bold">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-40"
+          style={{
+            backgroundImage:
+              "radial-gradient(at 20% 15%, rgba(255,255,255,0.35) 0px, transparent 45%), radial-gradient(at 90% 85%, rgba(255,255,255,0.2) 0px, transparent 50%)",
+          }}
+        />
+        <div className="relative flex items-center gap-2 text-lg font-bold">
           <Logo className="size-7 rounded" />
           Approva
         </div>
@@ -22,13 +29,13 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
           />
         </div>
 
-        <blockquote className="max-w-md text-sm text-primary-foreground/80">
+        <blockquote className="relative max-w-md text-sm text-primary-foreground/80">
           &ldquo;Cambia el comportamiento del sistema editando reglas en base de datos —
           sin que nadie recompile ni redespliegue nada.&rdquo;
         </blockquote>
       </div>
 
-      <div className="relative flex items-center justify-center bg-muted/30 p-4">
+      <div className="bg-mesh relative flex items-center justify-center p-4">
         <div className="absolute top-4 right-4">
           <ThemeToggle />
         </div>
