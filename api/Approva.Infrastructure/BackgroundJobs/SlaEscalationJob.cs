@@ -40,42 +40,51 @@ public class SlaEscalationJob
             .Where(r => requestIds.Contains(r.Id))
             .ToDictionaryAsync(r => r.Id, cancellationToken);
 
-        var assigneeIds = overdue.Select(t => t.AssignedToUserId).Distinct().ToList();
-        var users = await _db.Users.IgnoreQueryFilters()
-            .Where(u => assigneeIds.Contains(u.Id))
+        var assignees = await _db.Users.IgnoreQueryFilters()
+            .Where(u => overdue.Select(t => t.AssignedToUserId).Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, cancellationToken);
+
+        // Also load the assignees' managers — needed both to know where to escalate to
+        // and to email them. Loading only the assignees above and reusing that same
+        // dictionary here would silently skip almost every manager lookup and every
+        // escalation notification, since a manager is rarely also an overdue assignee.
+        var managerIds = assignees.Values.Where(u => u.ManagerId.HasValue).Select(u => u.ManagerId!.Value).Distinct().ToList();
+        var managers = await _db.Users.IgnoreQueryFilters()
+            .Where(u => managerIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, cancellationToken);
 
         var escalatedCount = 0;
 
         foreach (var task in overdue)
         {
-            if (!requests.TryGetValue(task.RequestId, out var request) || !users.TryGetValue(task.AssignedToUserId, out var assignee))
+            if (!requests.TryGetValue(task.RequestId, out var request) || !assignees.TryGetValue(task.AssignedToUserId, out var assignee))
                 continue;
+
+            // No manager to escalate to: deliberately leave the task Pending rather than
+            // terminating it into a dead end. A previous version called task.Escalate()
+            // unconditionally here, which marked the task as a terminal "Escalated" state
+            // with no replacement task created — the request was left with zero Pending
+            // tasks anywhere, invisible in every inbox, forever. Overdue-but-actionable
+            // beats silently orphaned.
+            if (assignee.ManagerId is null || !managers.TryGetValue(assignee.ManagerId.Value, out var manager))
+            {
+                _logger.LogWarning(
+                    "Tarea {TaskId} vencida pero {User} no tiene manager registrado; se deja pendiente sin escalar.",
+                    task.Id, assignee.Email);
+                continue;
+            }
 
             task.Escalate();
 
-            if (assignee.ManagerId is null)
-            {
-                _logger.LogWarning(
-                    "Tarea {TaskId} vencida pero {User} no tiene manager registrado; no se pudo escalar.",
-                    task.Id, assignee.Email);
-                _db.AuditEvents.Add(AuditEvent.Create(request.TenantId, request.Id, assignee.Id, AuditEventType.TaskEscalated,
-                    """{"outcome":"sin_manager_para_escalar"}"""));
-                continue;
-            }
-
-            var newTask = ApprovalTask.Create(task.RequestId, task.StepId, assignee.ManagerId.Value, slaHours: 24);
+            var newTask = ApprovalTask.Create(task.RequestId, task.StepId, manager.Id, slaHours: 24);
             _db.ApprovalTasks.Add(newTask);
 
             _db.AuditEvents.Add(AuditEvent.Create(request.TenantId, request.Id, assignee.Id, AuditEventType.TaskEscalated,
-                $$"""{"from":"{{assignee.Name}}"}"""));
+                $$"""{"from":"{{assignee.Name}}","to":"{{manager.Name}}"}"""));
 
-            if (users.TryGetValue(assignee.ManagerId.Value, out var manager))
-            {
-                await _notifications.SendAsync(manager.Email, $"Aprobación escalada: {request.Title}",
-                    $"La tarea de '{assignee.Name}' para la solicitud '{request.Title}' venció su SLA y fue escalada a ti.",
-                    cancellationToken);
-            }
+            await _notifications.SendAsync(manager.Email, $"Aprobación escalada: {request.Title}",
+                $"La tarea de '{assignee.Name}' para la solicitud '{request.Title}' venció su SLA y fue escalada a ti.",
+                cancellationToken);
 
             escalatedCount++;
         }

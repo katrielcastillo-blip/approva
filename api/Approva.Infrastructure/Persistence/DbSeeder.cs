@@ -33,9 +33,11 @@ public static class DbSeeder
         var passwordHash = hasher.Hash(DemoPassword);
 
         var admin = User.Create(tenant.Id, "admin@acme.test", "Admin Acme", UserRole.Admin, passwordHash);
-        var manager = User.Create(tenant.Id, "ana.gomez@acme.test", "Ana Gómez", UserRole.Approver, passwordHash, "Manager");
-        var cfo = User.Create(tenant.Id, "carlos.pena@acme.test", "Carlos Peña", UserRole.Approver, passwordHash, "CFO");
         var ceo = User.Create(tenant.Id, "elena.ruiz@acme.test", "Elena Ruiz", UserRole.Approver, passwordHash, "CEO");
+        var manager = User.Create(tenant.Id, "ana.gomez@acme.test", "Ana Gómez", UserRole.Approver, passwordHash, "Manager", managerId: ceo.Id);
+        // CFO reports to the CEO — a real org chart, and the reason SlaEscalationJob has
+        // somewhere to escalate to if Carlos ever sits on an overdue task too long.
+        var cfo = User.Create(tenant.Id, "carlos.pena@acme.test", "Carlos Peña", UserRole.Approver, passwordHash, "CFO", managerId: ceo.Id);
         var luis = User.Create(tenant.Id, "luis.fernandez@acme.test", "Luis Fernández", UserRole.Requester, passwordHash, managerId: manager.Id);
         var maria = User.Create(tenant.Id, "maria.torres@acme.test", "María Torres", UserRole.Requester, passwordHash, managerId: manager.Id);
 
@@ -59,9 +61,13 @@ public static class DbSeeder
         SeedApprovedRequest(db, tenant.Id, workflow, luis, allUsers, "Renovación de flota de vehículos", 75000, "Operaciones", now, daysAgo: 12);
         SeedApprovedRequest(db, tenant.Id, workflow, maria, allUsers, "Rediseño del sitio web corporativo", 22000, "Marketing", now, daysAgo: 6);
 
-        SeedPendingAtStep(db, tenant.Id, workflow, maria, allUsers, "Mobiliario de oficina", 1800, "Admin", stepIndex: 0, now, daysAgo: 1);
-        SeedPendingAtStep(db, tenant.Id, workflow, luis, allUsers, "Consultoría de marketing digital", 12000, "Marketing", stepIndex: 1, now, daysAgo: 3);
-        SeedPendingAtStep(db, tenant.Id, workflow, maria, allUsers, "Adquisición de startup local", 120000, "Estrategia", stepIndex: 2, now, daysAgo: 4);
+        // pendingAssignedHoursAgo is kept well under each step's SLA (24h/48h/72h) so the
+        // currently-pending task's DueAt always lands safely in the future — a task seeded
+        // as already-overdue gets swept up by SlaEscalationJob within its next 15-minute
+        // run, which is not what a fresh demo should show on first login.
+        SeedPendingAtStep(db, tenant.Id, workflow, maria, allUsers, "Mobiliario de oficina", 1800, "Admin", stepIndex: 0, now, daysAgo: 1, pendingAssignedHoursAgo: 3);
+        SeedPendingAtStep(db, tenant.Id, workflow, luis, allUsers, "Consultoría de marketing digital", 12000, "Marketing", stepIndex: 1, now, daysAgo: 3, pendingAssignedHoursAgo: 6);
+        SeedPendingAtStep(db, tenant.Id, workflow, maria, allUsers, "Adquisición de startup local", 120000, "Estrategia", stepIndex: 2, now, daysAgo: 4, pendingAssignedHoursAgo: 10);
 
         SeedRejectedRequest(db, tenant.Id, workflow, luis, allUsers, "Viaje de lujo a conferencia", 15000, "Ventas", now, daysAgo: 5);
 
@@ -119,16 +125,25 @@ public static class DbSeeder
     }
 
     private static void SeedPendingAtStep(ApprovaDbContext db, Guid tenantId, WorkflowDefinition workflow, User requester,
-        List<User> allUsers, string title, decimal amount, string department, int stepIndex, DateTimeOffset now, int daysAgo)
+        List<User> allUsers, string title, decimal amount, string department, int stepIndex, DateTimeOffset now,
+        int daysAgo, double pendingAssignedHoursAgo)
     {
         var request = NewRequest(tenantId, workflow, requester, title, amount, department);
         db.Requests.Add(request);
 
-        var clock = now.AddDays(-daysAgo);
-        db.AuditEvents.Add(Backdated(AuditEvent.Create(tenantId, request.Id, requester.Id, AuditEventType.RequestCreated), clock));
+        var requestCreatedAt = now.AddDays(-daysAgo);
+        db.AuditEvents.Add(Backdated(AuditEvent.Create(tenantId, request.Id, requester.Id, AuditEventType.RequestCreated), requestCreatedAt));
 
         var step = WorkflowEngine.DetermineNextStep(workflow, request, null);
         request.Submit(step?.Id);
+
+        // The currently-pending step's AssignedAt is fixed relative to "now" (not derived
+        // from requestCreatedAt) so its DueAt = pendingAssignedAt + slaHours always lands in
+        // the future regardless of how many days ago the request itself was created. Any
+        // earlier, already-decided steps get their timestamps spread evenly across the
+        // window between creation and that point, purely for a believable audit trail.
+        var pendingAssignedAt = now.AddHours(-pendingAssignedHoursAgo);
+        var previousAssignedAt = requestCreatedAt;
 
         for (var i = 0; i < stepIndex && step is not null; i++)
         {
@@ -136,12 +151,12 @@ public static class DbSeeder
             var task = ApprovalTask.Create(request.Id, step.Id, assigneeId, step.SlaHours);
             db.ApprovalTasks.Add(task);
 
-            var assignedAt = clock;
-            var decidedAt = assignedAt.AddHours(LatencyHoursFor(step));
+            var fraction = (double)(i + 1) / (stepIndex + 1);
+            var decidedAt = requestCreatedAt + TimeSpan.FromTicks((long)((pendingAssignedAt - requestCreatedAt).Ticks * fraction));
             task.Approve(assigneeId, "Aprobado.");
-            task.BackdateForSeed(assignedAt, assignedAt.AddHours(step.SlaHours), decidedAt);
+            task.BackdateForSeed(previousAssignedAt, previousAssignedAt.AddHours(step.SlaHours), decidedAt);
             db.AuditEvents.Add(Backdated(AuditEvent.Create(tenantId, request.Id, assigneeId, AuditEventType.TaskApproved), decidedAt));
-            clock = decidedAt;
+            previousAssignedAt = decidedAt;
 
             step = WorkflowEngine.DetermineNextStep(workflow, request, step.Id);
             request.AdvanceTo(step?.Id);
@@ -152,11 +167,11 @@ public static class DbSeeder
             var assigneeId = WorkflowEngine.ResolveApprover(step, requester, allUsers);
             var pendingTask = ApprovalTask.Create(request.Id, step.Id, assigneeId, step.SlaHours);
             db.ApprovalTasks.Add(pendingTask);
-            pendingTask.BackdateForSeed(clock, clock.AddHours(step.SlaHours), null);
-            db.AuditEvents.Add(Backdated(AuditEvent.Create(tenantId, request.Id, requester.Id, AuditEventType.TaskAssigned), clock));
+            pendingTask.BackdateForSeed(pendingAssignedAt, pendingAssignedAt.AddHours(step.SlaHours), null);
+            db.AuditEvents.Add(Backdated(AuditEvent.Create(tenantId, request.Id, requester.Id, AuditEventType.TaskAssigned), pendingAssignedAt));
         }
 
-        request.BackdateForSeed(now.AddDays(-daysAgo), null);
+        request.BackdateForSeed(requestCreatedAt, null);
     }
 
     private static void SeedRejectedRequest(ApprovaDbContext db, Guid tenantId, WorkflowDefinition workflow, User requester,

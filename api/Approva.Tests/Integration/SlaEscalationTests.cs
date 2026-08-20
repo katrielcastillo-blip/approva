@@ -151,4 +151,125 @@ public class SlaEscalationTests : IClassFixture<ApprovaWebApplicationFactory>
             Assert.Equal(vpId, tasks[1].AssignedToUserId);
         }
     }
+
+    /// <summary>Regression test for a real bug found manually: when the overdue task's
+    /// assignee has no manager (e.g. a CFO with nobody configured above them), the job
+    /// used to call task.Escalate() unconditionally before checking for a manager, which
+    /// terminated the task into a dead end with no replacement — the request ended up with
+    /// zero Pending tasks anywhere, invisible in every inbox forever. It must instead leave
+    /// the task Pending (still actionable, just overdue) rather than orphan the request.</summary>
+    [Fact]
+    public async Task OverdueTask_WithNoManagerToEscalateTo_StaysPendingInsteadOfOrphaningRequest()
+    {
+        var slug = $"sla2-{Guid.NewGuid():N}"[..12];
+        var adminClient = _factory.CreateClient();
+
+        var registerResponse = await adminClient.PostAsJsonAsync("/auth/register-tenant", new
+        {
+            tenantName = "Sla Co 2",
+            tenantSlug = slug,
+            adminName = "Admin",
+            adminEmail = $"admin@{slug}.test",
+            adminPassword = "TestPass123!"
+        });
+        registerResponse.EnsureSuccessStatusCode();
+        var admin = await registerResponse.Content.ReadFromJsonAsync<AuthResult>();
+        adminClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", admin!.Token);
+
+        // Manager has no manager of their own — nowhere to escalate to.
+        var managerResponse = await adminClient.PostAsJsonAsync("/users", new
+        {
+            email = $"manager@{slug}.test",
+            name = "Manager",
+            password = "TestPass123!",
+            role = "Approver",
+            approverRole = (string?)null,
+            managerId = (Guid?)null
+        });
+        managerResponse.EnsureSuccessStatusCode();
+        var managerId = (await managerResponse.Content.ReadFromJsonAsync<Dictionary<string, Guid>>())!["id"];
+
+        var requesterResponse = await adminClient.PostAsJsonAsync("/users", new
+        {
+            email = $"requester@{slug}.test",
+            name = "Requester",
+            password = "TestPass123!",
+            role = "Requester",
+            approverRole = (string?)null,
+            managerId
+        });
+        requesterResponse.EnsureSuccessStatusCode();
+
+        var workflowResponse = await adminClient.PostAsJsonAsync("/workflow-definitions", new
+        {
+            name = "Compras",
+            entityType = "PurchaseRequest",
+            steps = new[]
+            {
+                new
+                {
+                    name = "Manager",
+                    approverType = "Manager",
+                    approverRef = (string?)null,
+                    slaHours = 24,
+                    escalationPolicy = "EscalateToManager",
+                    conditions = Array.Empty<object>()
+                }
+            }
+        });
+        workflowResponse.EnsureSuccessStatusCode();
+        var workflowId = (await workflowResponse.Content.ReadFromJsonAsync<Dictionary<string, Guid>>())!["id"];
+
+        var requesterLogin = await adminClient.PostAsJsonAsync("/auth/login",
+            new { email = $"requester@{slug}.test", password = "TestPass123!" });
+        requesterLogin.EnsureSuccessStatusCode();
+        var requesterAuth = await requesterLogin.Content.ReadFromJsonAsync<AuthResult>();
+
+        using var requesterClient = _factory.CreateClient();
+        requesterClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", requesterAuth!.Token);
+
+        var createResponse = await requesterClient.PostAsJsonAsync("/requests", new
+        {
+            workflowDefinitionId = workflowId,
+            title = "Compra sin manager para escalar",
+            amount = 500,
+            currency = "USD",
+            payloadJson = "{}"
+        });
+        createResponse.EnsureSuccessStatusCode();
+        var requestId = (await createResponse.Content.ReadFromJsonAsync<Dictionary<string, Guid>>())!["id"];
+
+        Guid overdueTaskId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApprovaDbContext>();
+            var task = await db.ApprovalTasks.IgnoreQueryFilters()
+                .SingleAsync(t => t.RequestId == requestId && t.Status == ApprovalTaskStatus.Pending);
+            overdueTaskId = task.Id;
+            db.Database.ExecuteSqlInterpolated(
+                $"UPDATE approval_tasks SET \"DueAt\" = {DateTimeOffset.UtcNow.AddHours(-1)} WHERE \"Id\" = {task.Id}");
+        }
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var job = scope.ServiceProvider.GetRequiredService<SlaEscalationJob>();
+            await job.RunAsync();
+        }
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApprovaDbContext>();
+            var tasks = await db.ApprovalTasks.IgnoreQueryFilters().Where(t => t.RequestId == requestId).ToListAsync();
+
+            // Exactly the original task, still Pending — not escalated into a dead end,
+            // and no phantom replacement task was created either.
+            var task = Assert.Single(tasks);
+            Assert.Equal(overdueTaskId, task.Id);
+            Assert.Equal(ApprovalTaskStatus.Pending, task.Status);
+            Assert.Equal(managerId, task.AssignedToUserId);
+
+            var request = await db.Requests.IgnoreQueryFilters().SingleAsync(r => r.Id == requestId);
+            Assert.Equal(RequestStatus.Pending, request.Status);
+        }
+    }
 }
