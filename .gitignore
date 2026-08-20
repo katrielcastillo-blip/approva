@@ -1,0 +1,22 @@
+# .NET
+api/**/bin/
+api/**/obj/
+*.user
+*.suo
+
+# Node (web/ has its own .gitignore for build output; this covers stray installs)
+node_modules/
+
+# Env files
+.env
+.env.local
+*.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vs/
+.idea/
+*.swp
