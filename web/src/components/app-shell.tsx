@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
+import { OutOfOfficeToggle } from "@/components/out-of-office-toggle";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -61,6 +62,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <p className="truncate text-xs text-muted-foreground">
               {user?.email} · {user?.role}
             </p>
+          </div>
+          <div className="mb-1">
+            <OutOfOfficeToggle />
           </div>
           <Button variant="ghost" size="sm" className="w-full justify-start gap-2" onClick={logout}>
             <LogOut className="size-4" />

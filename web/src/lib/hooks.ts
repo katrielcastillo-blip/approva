@@ -160,6 +160,17 @@ export function useCreateUser() {
   });
 }
 
+export function useSetOutOfOffice() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { isOutOfOffice: boolean; delegateUserId: string | null }) =>
+      api.post<void>("/users/me/out-of-office", input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+  });
+}
+
 export function useCancelRequest() {
   const queryClient = useQueryClient();
   return useMutation({
