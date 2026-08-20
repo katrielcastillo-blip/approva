@@ -14,12 +14,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
   title: "Approva",
   description: "Motor de aprobaciones empresariales configurable, multi-tenant.",
   openGraph: {
     title: "Approva",
     description: "Motor de aprobaciones empresariales configurable, multi-tenant.",
-    images: ["/brand/og-image.png"],
+    images: ["/brand/og-image.jpg"],
   },
 };
 

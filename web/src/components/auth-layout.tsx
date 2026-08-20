@@ -2,31 +2,24 @@ import Image from "next/image";
 import { Logo } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-// Flip to true once /public/brand/login-illustration.png exists.
-const HAS_ILLUSTRATION = false;
-
 export function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       <div className="relative hidden flex-col justify-between overflow-hidden bg-primary p-10 text-primary-foreground lg:flex">
         <div className="flex items-center gap-2 text-lg font-bold">
-          <Logo className="size-7" />
+          <Logo className="size-7 rounded" />
           Approva
         </div>
 
         <div className="relative flex flex-1 items-center justify-center py-10">
-          {HAS_ILLUSTRATION ? (
-            <Image
-              src="/brand/login-illustration.png"
-              alt=""
-              width={520}
-              height={693}
-              className="max-h-full w-auto max-w-full object-contain drop-shadow-2xl"
-              priority
-            />
-          ) : (
-            <Logo className="size-40 opacity-10" />
-          )}
+          <Image
+            src="/brand/login-illustration.jpg"
+            alt="Solicitud avanzando a través de una cadena de verificaciones de aprobación"
+            width={1568}
+            height={1336}
+            className="max-h-[420px] w-auto max-w-full rounded-2xl object-contain shadow-2xl"
+            priority
+          />
         </div>
 
         <blockquote className="max-w-md text-sm text-primary-foreground/80">

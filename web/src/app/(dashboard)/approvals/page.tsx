@@ -7,7 +7,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
-import { Inbox } from "lucide-react";
 
 export default function ApprovalsPage() {
   const { data, isLoading } = usePendingApprovals();
@@ -30,7 +29,7 @@ export default function ApprovalsPage() {
       {!isLoading && data?.length === 0 && (
         <Card>
           <CardContent>
-            <EmptyState icon={Inbox} title="No tienes aprobaciones pendientes" description="Estás al día. 🎉" />
+            <EmptyState title="No tienes aprobaciones pendientes" description="Estás al día. 🎉" />
           </CardContent>
         </Card>
       )}

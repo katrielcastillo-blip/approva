@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState } from "@/components/empty-state";
-import { FileText, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   Draft: "outline",
@@ -69,7 +69,6 @@ export default function RequestsPage() {
               <TableRow>
                 <TableCell colSpan={5}>
                   <EmptyState
-                    icon={FileText}
                     title="Todavía no has creado ninguna solicitud"
                     description="Tus solicitudes de aprobación van a aparecer acá."
                   />

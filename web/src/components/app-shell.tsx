@@ -34,7 +34,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="flex w-60 shrink-0 flex-col border-r bg-muted/20">
         <div className="flex h-14 items-center justify-between border-b px-4">
           <div className="flex items-center gap-2">
-            <Logo className="size-6 text-primary" />
+            <Logo className="size-6 rounded-sm" />
             <span className="text-lg font-bold">Approva</span>
           </div>
           <ThemeToggle />
