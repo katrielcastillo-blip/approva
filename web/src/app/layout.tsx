@@ -16,6 +16,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Approva",
   description: "Motor de aprobaciones empresariales configurable, multi-tenant.",
+  openGraph: {
+    title: "Approva",
+    description: "Motor de aprobaciones empresariales configurable, multi-tenant.",
+    images: ["/brand/og-image.png"],
+  },
 };
 
 export default function RootLayout({
@@ -24,7 +29,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es">
+    <html lang="es" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

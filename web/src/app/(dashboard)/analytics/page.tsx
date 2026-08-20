@@ -3,7 +3,7 @@
 import { useBottleneckAnalytics } from "@/lib/hooks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { AlertTriangle } from "lucide-react";
 
 function hoursLabel(hours: number) {
@@ -62,8 +62,9 @@ export default function AnalyticsPage() {
                   <XAxis dataKey="stepName" tick={{ fontSize: 12 }} />
                   <YAxis tick={{ fontSize: 12 }} label={{ value: "horas", angle: -90, position: "insideLeft" }} />
                   <Tooltip formatter={(value) => hoursLabel(Number(value))} />
-                  <Bar dataKey="avgHoursToDecide" name="Promedio" fill="var(--primary)" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="medianHoursToDecide" name="Mediana" fill="var(--muted-foreground)" radius={[4, 4, 0, 0]} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="avgHoursToDecide" name="Promedio" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="medianHoursToDecide" name="Mediana" fill="var(--chart-2)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>

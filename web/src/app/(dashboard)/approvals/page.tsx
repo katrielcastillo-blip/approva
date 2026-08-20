@@ -6,6 +6,7 @@ import { formatCurrency, formatRelativeToNow } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/empty-state";
 import { Inbox } from "lucide-react";
 
 export default function ApprovalsPage() {
@@ -28,9 +29,8 @@ export default function ApprovalsPage() {
 
       {!isLoading && data?.length === 0 && (
         <Card>
-          <CardContent className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
-            <Inbox className="size-8" />
-            <p>No tienes aprobaciones pendientes. 🎉</p>
+          <CardContent>
+            <EmptyState icon={Inbox} title="No tienes aprobaciones pendientes" description="Estás al día. 🎉" />
           </CardContent>
         </Card>
       )}

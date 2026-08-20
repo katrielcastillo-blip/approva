@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AuthLayout } from "@/components/auth-layout";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -32,11 +33,11 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
+    <AuthLayout>
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle className="text-2xl">Approva</CardTitle>
-          <CardDescription>Motor de aprobaciones empresariales configurable.</CardDescription>
+          <CardTitle className="text-2xl">Bienvenido de vuelta</CardTitle>
+          <CardDescription>Inicia sesión en tu tenant de Approva.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -69,6 +70,6 @@ export default function LoginPage() {
           </p>
         </CardContent>
       </Card>
-    </div>
+    </AuthLayout>
   );
 }

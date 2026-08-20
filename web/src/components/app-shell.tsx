@@ -13,6 +13,8 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { OutOfOfficeToggle } from "@/components/out-of-office-toggle";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { Logo } from "@/components/logo";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -30,8 +32,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       <aside className="flex w-60 shrink-0 flex-col border-r bg-muted/20">
-        <div className="flex h-14 items-center border-b px-4">
-          <span className="text-lg font-bold">Approva</span>
+        <div className="flex h-14 items-center justify-between border-b px-4">
+          <div className="flex items-center gap-2">
+            <Logo className="size-6 text-primary" />
+            <span className="text-lg font-bold">Approva</span>
+          </div>
+          <ThemeToggle />
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-3">
           {navItems
