@@ -2,6 +2,7 @@ import type { ProblemDetails } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5080";
 const TOKEN_STORAGE_KEY = "approva.token";
+export const USER_STORAGE_KEY = "approva.user";
 
 export class ApiError extends Error {
   status: number;
@@ -55,7 +56,16 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
 
   if (!response.ok) {
     if (response.status === 401 && typeof window !== "undefined") {
+      // The token's signature can still be structurally valid while naming a user/tenant
+      // that no longer exists (deleted, or a local dev database reset regenerated all
+      // IDs) — the backend rejects those at authentication time. Rather than leaving the
+      // app "logged in" with every list silently empty, force a clean re-login.
+      const wasLoggedIn = !!getToken();
       setToken(null);
+      window.localStorage.removeItem(USER_STORAGE_KEY);
+      if (wasLoggedIn && window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
     }
     throw new ApiError(response.status, data as ProblemDetails | null, response.statusText);
   }

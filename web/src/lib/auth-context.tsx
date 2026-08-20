@@ -2,10 +2,8 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { api, setToken } from "@/lib/api-client";
+import { api, setToken, USER_STORAGE_KEY } from "@/lib/api-client";
 import type { AuthResult } from "@/lib/types";
-
-const USER_STORAGE_KEY = "approva.user";
 
 interface AuthContextValue {
   user: AuthResult | null;

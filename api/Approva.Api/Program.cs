@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text;
 using Approva.Api.Endpoints;
 using Approva.Api.Extensions;
@@ -54,6 +55,33 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Secret)),
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromMinutes(1)
+        };
+
+        // A JWT's signature staying valid doesn't mean the user it names still exists —
+        // e.g. a local dev database reset (drop + reseed) generates brand new row IDs,
+        // so a browser holding an old token would otherwise keep "successfully"
+        // authenticating against a tenant/user that's gone, and every list endpoint
+        // would silently return empty results instead of erroring. Reject those tokens
+        // outright here so the frontend sees a clean 401 and forces a fresh login,
+        // instead of a confusing "everything is empty" screen.
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var userIdClaim = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (!Guid.TryParse(userIdClaim, out var userId))
+                {
+                    context.Fail("Token inválido: falta el identificador de usuario.");
+                    return;
+                }
+
+                var db = context.HttpContext.RequestServices.GetRequiredService<ApprovaDbContext>();
+                var exists = await db.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == userId);
+                if (!exists)
+                {
+                    context.Fail("El usuario de este token ya no existe. Inicia sesión de nuevo.");
+                }
+            }
         };
     });
 
